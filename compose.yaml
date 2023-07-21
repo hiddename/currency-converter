@@ -1,0 +1,138 @@
+services:
+  nginx:
+    image: ${COMPOSE_PROJECT_NAME}.nginx:${COMPOSE_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME}.nginx
+    build:
+      context: ./docker/nginx
+      dockerfile: nginx.Dockerfile
+    volumes:
+      - type: bind
+        source: ./app
+        target: /var/www/html
+      - type: bind
+        source: ./docker/nginx/conf.d
+        target: /etc/nginx/conf.d
+        read_only: true
+    ports:
+      - mode: ingress
+        target: 80
+        published: ${NGINX_EXPOSE_PORT}
+        protocol: tcp
+    restart: unless-stopped
+    networks:
+      - cc_net
+    links:
+      - app
+    depends_on:
+      - app
+
+  app: &app
+    image: ${COMPOSE_PROJECT_NAME}.app:${COMPOSE_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME}.app
+    build:
+      context: ./docker/php
+      dockerfile: php.Dockerfile
+    command: /var/www/html/entrypoints/docker/php/app.sh
+    volumes:
+      - type: bind
+        source: ./app
+        target: /var/www/html
+      - type: bind
+        source: ./docker/php/conf.d/php.ini
+        target: /usr/local/etc/php/conf.d/php.ini
+        read_only: true
+      - type: bind
+        source: ./docker/php/crontabs/www-data
+        target: /etc/crontabs/www-data
+        read_only: true
+    restart: unless-stopped
+    networks:
+      - cc_net
+    depends_on:
+      - pgsql
+      - redis
+
+  pgsql:
+    image: ${COMPOSE_PROJECT_NAME}.postgres:${COMPOSE_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME}.postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    build:
+      context: ./docker/pgsql
+      dockerfile: pgsql.Dockerfile
+    volumes:
+      - type: bind
+        source: ./docker/pgsql/postgresql.conf
+        target: /etc/postgresql.conf
+        read_only: true
+      - type: volume
+        source: pg_data
+        target: /var/lib/postgresql/data
+    ports:
+      - mode: ingress
+        target: 5432
+        published: ${POSTGRES_EXPOSE_PORT}
+        protocol: tcp
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql.conf
+    healthcheck:
+      test:
+        - CMD
+        - pg_isready
+        - -q
+        - -U
+        - ${POSTGRES_USER}
+        - -d
+        - ${POSTGRES_DB}
+      start_period: 0s
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - cc_net
+
+  redis:
+    image: ${COMPOSE_PROJECT_NAME}.redis:${COMPOSE_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME}.redis
+    build:
+      context: ./docker/redis
+      dockerfile: redis.Dockerfile
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+    ports:
+      - mode: ingress
+        target: 6379
+        published: ${REDIS_EXPOSE_PORT}
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: redis_data
+        target: /data
+    restart: unless-stopped
+    networks:
+      - cc_net
+
+  cron:
+    <<: *app
+    image: ${COMPOSE_PROJECT_NAME}.cron:${COMPOSE_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME}.cron
+    entrypoint: /var/www/html/entrypoints/docker/php/cron.sh
+
+volumes:
+  pg_data:
+    name: cc_pg_data
+  redis_data:
+    name:
+      cc_redis_data
+
+networks:
+  cc_net:
+    name: cc_net
+    driver: bridge

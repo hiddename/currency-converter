@@ -1,0 +1,2 @@
+*  *  *  *  *  sleep 30 && php /var/www/html/bin/console app:rate:refresh --provider-key coindesk_bitcoin_price_index -e prod
+5 14  *  *  *  php /var/www/html/bin/console app:rate:refresh --provider-key ecb -e prod

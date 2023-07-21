@@ -1,0 +1,30 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/DependencyInjection/'
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+            - '../src/helpers.php'
+
+    App\Service\RateProvider\Providers\EuropeanCentralBank:
+        arguments:
+            $parser: '@App\Service\RateProvider\ResponseParsers\XMLResponseParser'
+            $url: 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml'
+            $baseCurrencyCode: 'EUR'
+        tags: [ 'app.rate_provider' ]
+
+    App\Service\RateProvider\Providers\CoindeskBitcoinPriceIndex:
+        arguments:
+            $parser: '@App\Service\RateProvider\ResponseParsers\JsonResponseParser'
+            $url: 'https://api.coindesk.com/v1/bpi/currentprice.json'
+            $baseCurrencyCode: 'BTC'
+        tags: [ 'app.rate_provider' ]
+
+    App\Service\RateRefresher\RateRefresher:
+        arguments:
+            $providers: !tagged_iterator app.rate_provider
